@@ -73,7 +73,7 @@ The buttons in the GUI are located in the order which you need to follow to cali
 You can also control the visualization using the following buttons:
 * `show_frame` - `show_ids` the same as above.
 * `show_spline` toggles the visibility of enabled measurements (accel, gyro, position, velocity) generated from the spline that we optimize.
-* `show_data` toggles the visibility of raw data containted in the dataset.
+* `show_data` toggles the visibility of raw data contained in the dataset.
 * `show_accel` shows accelerometer data.
 * `show_gyro` shows gyroscope data.
 * `show_pos` shows the position data.
@@ -86,7 +86,7 @@ The following options control the optimization process:
 * `opt_poses` enables optimization based camera pose initialization. Sometimes helps to better initialize the spline before running optimization with `opt_corners`.
 * `opt_corners` enables optimization based on reprojection corner positions **(should be used by default)**.
 * `opt_cam_time_offset` computes the time offset between camera and the IMU. This option should be used only for refinement when the optimization already converged.
-* `opt_imu_scale` enables IMU axis scaling, rotation and mislignment calibration. This option should be used only for refinement when the optimization already converged.
+* `opt_imu_scale` enables IMU axis scaling, rotation and misalignment calibration. This option should be used only for refinement when the optimization already converged.
 * `opt_mocap` enables Mocap optimization. You should run it only after pressing `init_mocap`.
 * `huber_thresh` controls the threshold for the huber norm in pixels for the optimization.
 
