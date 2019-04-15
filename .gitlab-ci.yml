@@ -79,7 +79,6 @@ eval_euroc:
 
 gen_results_euroc:
   stage: deploy
-  parallel: 10
   variables:
     GIT_STRATEGY: none
   only:
