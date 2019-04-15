@@ -13,7 +13,7 @@ mkdir $folder_name
 
 
 
-for d in ${DATASETS[@]}; do
+for d in ${DATASETS[$CI_NODE_INDEX]}; do
    basalt_vio --dataset-path  $DATASET_PATH/$d --cam-calib /usr/etc/basalt/euroc_ds_calib.json \
         --dataset-type euroc --show-gui 0 --config-path /usr/etc/basalt/euroc_config.json \
         --result-path $folder_name/vio_$d --marg-data eval_tmp_marg_data
@@ -23,4 +23,4 @@ for d in ${DATASETS[@]}; do
     rm -rf eval_tmp_marg_data
 done
 
-./gen_results.py $folder_name > euroc_results.txt
+#./gen_results.py $folder_name > euroc_results.txt

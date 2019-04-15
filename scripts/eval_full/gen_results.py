@@ -2,7 +2,6 @@
 
 import os
 import sys
-import numpy as np
 
 
 datasets = ['MH_01_easy', 'MH_02_easy', 'MH_03_medium', 'MH_04_difficult',

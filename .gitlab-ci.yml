@@ -61,6 +61,7 @@ compile_16_04:
 
 eval_euroc:
   stage: test
+  parallel: 10
   tags: 
     - euroc-eval
   variables:
@@ -69,7 +70,8 @@ eval_euroc:
     - vlad_devel
   artifacts:
     paths:
-    - scripts/eval_full/*
+    - scripts/eval_full/eval_results/*
+    expire_in: 1 week
   script:
     - dpkg -i deb_bionic/*.deb
     - cd scripts/eval_full
