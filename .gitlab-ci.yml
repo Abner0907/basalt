@@ -77,6 +77,22 @@ eval_euroc:
     - cd scripts/eval_full
     - ./run_evaluations.sh
 
+gen_results_euroc:
+  stage: deploy
+  parallel: 10
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - vlad_devel
+  artifacts:
+    paths:
+    - euroc_results.txt
+    expire_in: 1 week
+  script:
+    - cd scripts/eval_full
+    - ./gen_results.py > euroc_results.txt
+    - mv euroc_results.txt ../../
+
 
 deploy:
   stage: deploy
