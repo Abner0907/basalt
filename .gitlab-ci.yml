@@ -1,5 +1,11 @@
 image: vladyslavusenko/b_image:latest
 
+stages:
+  - build
+  - test
+  - test_results
+  - deploy
+
 compile:
   stage: build
   variables:
@@ -31,6 +37,8 @@ compile:
 
 compile_16_04:
   stage: build
+  variables:
+    CXX_MARCH: 'corei7-avx'
   before_script:
     - mkdir -p ccache
     - export CCACHE_BASEDIR=${PWD}
@@ -78,18 +86,18 @@ eval_euroc:
     - ./run_evaluations.sh
 
 gen_results_euroc:
-  stage: deploy
+  stage: test_results
   variables:
     GIT_STRATEGY: none
+  when: on_success
   only:
     - vlad_devel
   artifacts:
     paths:
     - euroc_results.txt
-    expire_in: 1 week
   script:
     - cd scripts/eval_full
-    - ./gen_results.py > euroc_results.txt
+    - ./gen_results.py eval_results > euroc_results.txt
     - mv euroc_results.txt ../../
 
 
