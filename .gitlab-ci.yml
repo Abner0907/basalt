@@ -26,6 +26,7 @@ compile:
   artifacts:
     paths:
     - deb_bionic/*.deb
+    - scripts/eval_full/*
     expire_in: 1 week
 
 compile_16_04:
@@ -56,6 +57,23 @@ compile_16_04:
   only:
     - master
   image: vladyslavusenko/b_image_xenial:latest
+
+
+eval_euroc:
+  stage: test
+  tags: euroc-eval
+  variables:
+    GIT_STRATEGY: none
+  only:
+    - vlad_devel
+  artifacts:
+    paths:
+    - scripts/eval_full/*
+  script:
+    - dpkg -i deb_bionic/*.deb
+    - cd scripts/eval_full
+    - ./run_evaluations.sh
+
 
 deploy:
   stage: deploy
