@@ -98,6 +98,7 @@ gen_results_euroc:
   script:
     - cd scripts/eval_full
     - ./gen_results.py eval_results > euroc_results.txt
+    - cat euroc_results.txt
     - mv euroc_results.txt ../../
 
 
