@@ -75,7 +75,7 @@ eval_euroc:
   variables:
     GIT_STRATEGY: none
   only:
-    - vlad_devel
+    - master
   artifacts:
     paths:
     - scripts/eval_full/eval_results/*
@@ -91,7 +91,7 @@ gen_results_euroc:
     GIT_STRATEGY: none
   when: on_success
   only:
-    - vlad_devel
+    - master
   artifacts:
     paths:
     - euroc_results.txt
