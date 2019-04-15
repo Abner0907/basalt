@@ -61,7 +61,8 @@ compile_16_04:
 
 eval_euroc:
   stage: test
-  tags: euroc-eval
+  tags: 
+    - euroc-eval
   variables:
     GIT_STRATEGY: none
   only:
