@@ -24,6 +24,7 @@ The command line options have the following meaning:
 * `--dataset-path` path to the dataset.
 * `--dataset-type` type of the datset. Currently only `bag` and `euroc` formats of the datasets are supported.
 * `--cam-calib` path to camera calibration file. Check [calibration instructions](doc/Calibration.md) to see how the calibration was generated.
+* `--config-path` path to the configuration file.
 * `--marg-data` folder where the data from keyframe marginalization will be stored. This data can be later used for visual-inertial mapping.
 * `--show-gui` enables or disables GUI.
 
