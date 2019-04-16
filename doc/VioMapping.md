@@ -74,7 +74,7 @@ The workflow for the mapping is the following:
 The `num_opt_iter` slider controls the maximum number of iterations executed when pressing `optimize`.
 
 
-For more systematic evaluation see the evaluation scripts in the `scripts/eval_full` folder.
+For more systematic evaluation see the evaluation scripts in the [scripts/eval_full](scripts/eval_full) folder.
 
 **NOTE: It appears that only the datasets in ASL Dataset Format (`euroc` dataset type in our notation) contain ground truth that is time-aligned to the IMU and camera images. It is located in the `state_groundtruth_estimate0` folder. Bag files have raw Mocap measurements that are not time aligned and should not be used for evaluations.**
 
