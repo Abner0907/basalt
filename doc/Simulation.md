@@ -28,8 +28,8 @@ The buttons in the GUI have the following meaning:
 * `show_gt_...` shows ground truth position, velocity and biases.
 * `show_est_...` shows VIO estimates of the position, velocity and biases.
 * `next_step` proceeds to next frame.
-* `continue_btn` plays the sequence.
-* `align_button` performs SE(3) alignment with ground-truth trajectory and prints the RMS ATE to the console.
+* `continue` plays the sequence.
+* `align_svd` performs SE(3) alignment with ground-truth trajectory and prints the RMS ATE to the console.
 
 
 ### Visual-inertial mapping simulator
