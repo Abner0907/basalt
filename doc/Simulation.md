@@ -46,5 +46,6 @@ The system processes the marginalization data and extracts the non-linear factor
 * `rand_inc` applies a random increment to all frames of the system. If you run the `optimize` until convergence afterwards, and press `align_svd` the alignment transformation should only contain the rotation around Z axis.
 * `rand_yaw` applies an increment in yaw to all poses. This should not change the error of the optimization once is have converged.
 * `setup_points` triangulates the points and adds them to optimization. You should optimize the system again after adding the points.
+* `align_svd` performs SE(3) alignment with ground-truth trajectory and prints the RMS ATE to the console.
 
 For comparison we also provide the `basalt_mapper_sim_naive` executable that has the same parameters. It runs a global bundle-adjustment on keyframe data and inserts pre-integrated IMU measurements between keyframes. This executable is included for comparison only.
