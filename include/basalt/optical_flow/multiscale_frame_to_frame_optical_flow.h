@@ -81,6 +81,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
     this->calib = calib.cast<Scalar>();
 
     patch_coord = PatchT::pattern2.template cast<float>();
+    depth_guess = config.optical_flow_matching_default_depth;
 
     if (calib.intrinsics.size() > 1) {
       Eigen::Matrix4d Ed;
@@ -200,7 +201,8 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
           transform_map_1,
       const std::map<KeypointId, size_t>& pyramid_levels_1,
       Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>& transform_map_2,
-      std::map<KeypointId, size_t>& pyramid_levels_2) const {
+      std::map<KeypointId, size_t>& pyramid_levels_2,
+      bool matching = false) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -223,6 +225,12 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
     tbb::concurrent_unordered_map<KeypointId, size_t, std::hash<KeypointId>>
         result_pyramid_level;
 
+    double depth = depth_guess;
+
+    MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
+    bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
+    const bool use_depth = matching && guess_requires_depth;
+
     auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
       for (size_t r = range.begin(); r != range.end(); ++r) {
         const KeypointId id = ids[r];
@@ -232,6 +240,13 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
 
         auto t1 = transform_1.translation();
         auto t2 = transform_2.translation();
+
+        Eigen::Vector2f off{0, 0};
+        if (use_depth) {
+          off = calib.viewOffset(t1, depth);
+        }
+
+        t2 -= off;  // This modifies transform_2
 
         bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
                      t2(1) < pyr_2.lvl(0).h;
@@ -243,6 +258,8 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
 
         Eigen::AffineCompact2f transform_1_recovered = transform_2;
         auto t1_recovered = transform_1_recovered.translation();
+
+        t1_recovered += off;
 
         valid = trackPoint(pyr_2, pyr_1, transform_2, pyramid_level[r],
                            transform_1_recovered);
@@ -396,7 +413,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
 
       trackPoints(pyramid->at(0), pyramid->at(1), new_poses_main,
                   new_pyramid_levels_main, new_poses_stereo,
-                  new_pyramid_levels_stereo);
+                  new_pyramid_levels_stereo, true);
 
       for (const auto& kv : new_poses_stereo) {
         transforms->observations.at(1).emplace(kv);

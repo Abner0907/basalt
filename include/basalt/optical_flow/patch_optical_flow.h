@@ -84,6 +84,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
     this->calib = calib.cast<Scalar>();
 
     patch_coord = PatchT::pattern2.template cast<float>();
+    depth_guess = config.optical_flow_matching_default_depth;
 
     if (calib.intrinsics.size() > 1) {
       Eigen::Matrix4d Ed;
@@ -173,12 +174,13 @@ class PatchOpticalFlow : public OpticalFlowBase {
     frame_counter++;
   }
 
-  void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
-                   const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-                   const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_1,
-                   Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_2) const {
+  void trackPoints(
+      const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+      const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+      const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
+          transform_map_1,
+      Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>& transform_map_2,
+      bool matching = false) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -196,6 +198,12 @@ class PatchOpticalFlow : public OpticalFlowBase {
                                   std::hash<KeypointId>>
         result;
 
+    double depth = depth_guess;
+
+    MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
+    bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
+    const bool use_depth = matching && guess_requires_depth;
+
     auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
       for (size_t r = range.begin(); r != range.end(); ++r) {
         const KeypointId id = ids[r];
@@ -205,6 +213,13 @@ class PatchOpticalFlow : public OpticalFlowBase {
 
         auto t1 = transform_1.translation();
         auto t2 = transform_2.translation();
+
+        Eigen::Vector2f off{0, 0};
+        if (use_depth) {
+          off = calib.viewOffset(t1, depth);
+        }
+
+        t2 -= off;  // This modifies transform_2
 
         bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
                      t2(1) < pyr_2.lvl(0).h;
@@ -217,6 +232,8 @@ class PatchOpticalFlow : public OpticalFlowBase {
 
         Eigen::AffineCompact2f transform_1_recovered = transform_2;
         auto t1_recovered = transform_1_recovered.translation();
+
+        t1_recovered += off;
 
         valid = trackPoint(pyr_1, patch_vec, transform_1_recovered);
         if (!valid) continue;
@@ -338,7 +355,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
     }
 
     if (calib.intrinsics.size() > 1) {
-      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1, true);
 
       for (const auto& kv : new_poses1) {
         transforms->observations.at(1).emplace(kv);

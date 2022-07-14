@@ -97,6 +97,8 @@ pangolin::Var<bool> show_obs("ui.show_obs", true, false, true);
 pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
 pangolin::Var<bool> show_same_pixel_guess("ui.show_same_pixel_guess", false,
                                           false, true);
+pangolin::Var<bool> show_active_guess("ui.show_active_guess", false, false,
+                                      true);
 
 pangolin::Var<bool> show_est_pos("ui.show_est_pos", true, false, true);
 pangolin::Var<bool> show_est_vel("ui.show_est_vel", false, false, true);
@@ -729,7 +731,7 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     }
   }
 
-  bool show_guesses = show_same_pixel_guess &&
+  bool show_guesses = (show_active_guess || show_same_pixel_guess) &&
                       cam_id == 1 && it != vis_map.end() &&
                       it->second->projections.size() >= 2;
   if (show_guesses) {
@@ -764,6 +766,17 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
         if (show_same_pixel_guess) {
           glColor3f(0, 1, 1);  // Cyan
           pangolin::glDrawLine(u1, v1, u0, v0);
+        }
+
+        // Guess with the current guess type
+        if (show_active_guess) {
+          glColor3f(1, 0, 1);  // Magenta
+          Eigen::Vector2d off{0, 0};
+          if (vio_config.optical_flow_matching_guess_type !=
+              basalt::MatchingGuessType::SAME_PIXEL) {
+            off = calib.viewOffset({u0, v0}, opt_flow_ptr->depth_guess);
+          }
+          pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
         }
       }
     }

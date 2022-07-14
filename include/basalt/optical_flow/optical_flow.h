@@ -78,6 +78,7 @@ class OpticalFlowBase {
   tbb::concurrent_bounded_queue<OpticalFlowResult::Ptr>* output_queue = nullptr;
 
   Eigen::MatrixXf patch_coord;
+  double depth_guess = -1;
 };
 
 class OpticalFlowFactory {

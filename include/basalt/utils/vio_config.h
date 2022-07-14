@@ -39,7 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace basalt {
 
 enum class LinearizationType { ABS_QR, ABS_SC, REL_SC };
-enum class MatchingGuessType { SAME_PIXEL };
+enum class MatchingGuessType { SAME_PIXEL, REPROJ_FIX_DEPTH };
 
 struct VioConfig {
   VioConfig();
@@ -55,6 +55,7 @@ struct VioConfig {
   float optical_flow_epipolar_error;
   int optical_flow_skip_frames;
   MatchingGuessType optical_flow_matching_guess_type;
+  float optical_flow_matching_default_depth;
 
   LinearizationType vio_linearization_type;
   bool vio_sqrt_marg;
