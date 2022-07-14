@@ -75,6 +75,7 @@ class OpticalFlowBase {
   using Ptr = std::shared_ptr<OpticalFlowBase>;
 
   tbb::concurrent_bounded_queue<OpticalFlowInput::Ptr> input_queue;
+  tbb::concurrent_queue<double> input_depth_queue;
   tbb::concurrent_bounded_queue<OpticalFlowResult::Ptr>* output_queue = nullptr;
 
   Eigen::MatrixXf patch_coord;

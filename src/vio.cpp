@@ -99,6 +99,8 @@ pangolin::Var<bool> show_same_pixel_guess("ui.show_same_pixel_guess", false,
                                           false, true);
 pangolin::Var<bool> show_active_guess("ui.show_active_guess", false, false,
                                       true);
+pangolin::Var<double> depth_guess{"ui.depth_guess", 2,
+                                  pangolin::META_FLAG_READONLY};
 
 pangolin::Var<bool> show_est_pos("ui.show_est_pos", true, false, true);
 pangolin::Var<bool> show_est_vel("ui.show_est_vel", false, false, true);
@@ -314,6 +316,7 @@ int main(int argc, char** argv) {
     opt_flow_ptr->output_queue = &vio->vision_data_queue;
     if (show_gui) vio->out_vis_queue = &out_vis_queue;
     vio->out_state_queue = &out_state_queue;
+    vio->opt_flow_depth_guess_queue = &opt_flow_ptr->input_depth_queue;
   }
 
   basalt::MargDataSaver::Ptr marg_data_saver;
@@ -731,6 +734,7 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     }
   }
 
+  depth_guess = opt_flow_ptr->depth_guess;
   bool show_guesses = (show_active_guess || show_same_pixel_guess) &&
                       cam_id == 1 && it != vis_map.end() &&
                       it->second->projections->size() >= 2;
@@ -774,7 +778,7 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
           Eigen::Vector2d off{0, 0};
           if (vio_config.optical_flow_matching_guess_type !=
               basalt::MatchingGuessType::SAME_PIXEL) {
-            off = calib.viewOffset({u0, v0}, opt_flow_ptr->depth_guess);
+            off = calib.viewOffset({u0, v0}, depth_guess);
           }
           pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
         }

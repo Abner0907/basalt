@@ -86,6 +86,8 @@ class VioEstimatorBase {
   tbb::concurrent_bounded_queue<VioVisualizationData::Ptr>* out_vis_queue =
       nullptr;
 
+  tbb::concurrent_queue<double>* opt_flow_depth_guess_queue = nullptr;
+
   virtual void initialize(int64_t t_ns, const Sophus::SE3d& T_w_i,
                           const Eigen::Vector3d& vel_w_i,
                           const Eigen::Vector3d& bg,

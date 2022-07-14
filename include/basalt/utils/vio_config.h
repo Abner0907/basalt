@@ -39,7 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace basalt {
 
 enum class LinearizationType { ABS_QR, ABS_SC, REL_SC };
-enum class MatchingGuessType { SAME_PIXEL, REPROJ_FIX_DEPTH };
+enum class MatchingGuessType { SAME_PIXEL, REPROJ_FIX_DEPTH, REPROJ_AVG_DEPTH };
 
 struct VioConfig {
   VioConfig();

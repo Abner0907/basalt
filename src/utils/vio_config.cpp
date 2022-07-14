@@ -54,7 +54,7 @@ VioConfig::VioConfig() {
   optical_flow_levels = 3;
   optical_flow_epipolar_error = 0.005;
   optical_flow_skip_frames = 1;
-  optical_flow_matching_guess_type = MatchingGuessType::SAME_PIXEL;
+  optical_flow_matching_guess_type = MatchingGuessType::REPROJ_AVG_DEPTH;
   optical_flow_matching_default_depth = 2.0;
 
   vio_linearization_type = LinearizationType::ABS_QR;

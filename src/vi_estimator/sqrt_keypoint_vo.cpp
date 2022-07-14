@@ -412,10 +412,13 @@ bool SqrtKeypointVoEstimator<Scalar_>::measure(
   optimize_and_marg(num_points_connected, lost_landmaks);
 
   size_t num_cams = opt_flow_meas->observations.size();
+  bool avg_depth_needed =
+      opt_flow_depth_guess_queue && config.optical_flow_matching_guess_type ==
+                                        MatchingGuessType::REPROJ_AVG_DEPTH;
 
   using Projections = std::vector<Eigen::aligned_vector<Eigen::Vector4d>>;
   std::shared_ptr<Projections> projections = nullptr;
-  if (out_vis_queue) {
+  if (out_vis_queue || avg_depth_needed) {
     projections = std::make_shared<Projections>(num_cams);
     computeProjections(*projections, last_state_t_ns);
   }
@@ -427,6 +430,21 @@ bool SqrtKeypointVoEstimator<Scalar_>::measure(
         p.getT_ns(), p.getPose().template cast<double>(),
         Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero(),
         Eigen::Vector3d::Zero()));
+
+    if (avg_depth_needed) {
+      double avg_invdepth = 0;
+      double num_features = 0;
+      for (const auto& cam_projs : *projections) {
+        for (const Eigen::Vector4d& v : cam_projs) avg_invdepth += v.z();
+        num_features += cam_projs.size();
+      }
+
+      bool valid = avg_invdepth > 0 && num_features > 0;
+      float default_depth = config.optical_flow_matching_default_depth;
+      double avg_depth = valid ? num_features / avg_invdepth : default_depth;
+
+      opt_flow_depth_guess_queue->push(avg_depth);
+    }
 
     out_state_queue->push(data);
   }

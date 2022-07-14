@@ -103,6 +103,8 @@ class PatchOpticalFlow : public OpticalFlowBase {
     OpticalFlowInput::Ptr input_ptr;
 
     while (true) {
+      while (input_depth_queue.try_pop(depth_guess)) continue;
+
       input_queue.pop(input_ptr);
 
       if (!input_ptr.get()) {
