@@ -208,22 +208,26 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
         const Eigen::AffineCompact2f& transform_1 = init_vec[r];
         Eigen::AffineCompact2f transform_2 = transform_1;
 
-        bool valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        auto t1 = transform_1.translation();
+        auto t2 = transform_2.translation();
 
-        if (valid) {
-          Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
+                     t2(1) < pyr_2.lvl(0).h;
+        if (!valid) continue;
 
-          valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        if (!valid) continue;
 
-          if (valid) {
-            Scalar dist2 = (transform_1.translation() -
-                            transform_1_recovered.translation())
-                               .squaredNorm();
+        Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        auto t1_recovered = transform_1_recovered.translation();
 
-            if (dist2 < config.optical_flow_max_recovered_dist2) {
-              result[id] = transform_2;
-            }
-          }
+        valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        if (!valid) continue;
+
+        Scalar dist2 = (t1 - t1_recovered).squaredNorm();
+
+        if (dist2 < config.optical_flow_max_recovered_dist2) {
+          result[id] = transform_2;
         }
       }
     };

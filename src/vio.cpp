@@ -95,6 +95,8 @@ pangolin::Var<int> show_frame("ui.show_frame", 0, 0, 1500);
 pangolin::Var<bool> show_flow("ui.show_flow", false, false, true);
 pangolin::Var<bool> show_obs("ui.show_obs", true, false, true);
 pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
+pangolin::Var<bool> show_same_pixel_guess("ui.show_same_pixel_guess", false,
+                                          false, true);
 
 pangolin::Var<bool> show_est_pos("ui.show_est_pos", true, false, true);
 pangolin::Var<bool> show_est_vel("ui.show_est_vel", false, false, true);
@@ -724,6 +726,46 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
       pangolin::GlFont::I()
           .Text("Tracked %d points", points.size())
           .Draw(5, 20);
+    }
+  }
+
+  bool show_guesses = show_same_pixel_guess &&
+                      cam_id == 1 && it != vis_map.end() &&
+                      it->second->projections.size() >= 2;
+  if (show_guesses) {
+    const auto keypoints0 = it->second->projections.at(0);
+    const auto keypoints1 = it->second->projections.at(1);
+
+    for (const Eigen::Vector4d& kp1 : keypoints1) {
+      double u1 = kp1.x();
+      double v1 = kp1.y();
+      double id1 = kp1.w();
+
+      // Find match in keypoints0
+      double u0 = 0;
+      double v0 = 0;
+      bool found = false;
+      for (const Eigen::Vector4d& kp0 : keypoints0) {
+        double id0 = kp0.w();
+
+        if (id1 != id0) continue;
+        u0 = kp0.x();
+        v0 = kp0.y();
+        found = true;
+        break;
+      }
+
+      // Display guess error if this is a stereo feature
+      // NOTE: keep in mind that these guesses are not really the guesses
+      // used to detect the feature, but the guess we would use if we were
+      // to detect the feature right now.
+      if (found) {
+        // Guess if we were using SAME_PIXEL
+        if (show_same_pixel_guess) {
+          glColor3f(0, 1, 1);  // Cyan
+          pangolin::glDrawLine(u1, v1, u0, v0);
+        }
+      }
     }
   }
 

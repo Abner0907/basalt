@@ -230,26 +230,30 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
         const Eigen::AffineCompact2f& transform_1 = init_vec[r];
         Eigen::AffineCompact2f transform_2 = transform_1;
 
-        bool valid = trackPoint(pyr_1, pyr_2, transform_1, pyramid_level[r],
-                                transform_2);
+        auto t1 = transform_1.translation();
+        auto t2 = transform_2.translation();
 
-        if (valid) {
-          Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
+                     t2(1) < pyr_2.lvl(0).h;
+        if (!valid) continue;
 
-          valid = trackPoint(pyr_2, pyr_1, transform_2, pyramid_level[r],
-                             transform_1_recovered);
+        valid = trackPoint(pyr_1, pyr_2, transform_1, pyramid_level[r],
+                           transform_2);
+        if (!valid) continue;
 
-          if (valid) {
-            const Scalar scale = 1 << pyramid_level[r];
-            Scalar dist2 = (transform_1.translation() / scale -
-                            transform_1_recovered.translation() / scale)
-                               .squaredNorm();
+        Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        auto t1_recovered = transform_1_recovered.translation();
 
-            if (dist2 < config.optical_flow_max_recovered_dist2) {
-              result_transforms[id] = transform_2;
-              result_pyramid_level[id] = pyramid_level[r];
-            }
-          }
+        valid = trackPoint(pyr_2, pyr_1, transform_2, pyramid_level[r],
+                           transform_1_recovered);
+        if (!valid) continue;
+
+        const Scalar scale = 1 << pyramid_level[r];
+        Scalar dist2 = ((t1 - t1_recovered) / scale).squaredNorm();
+
+        if (dist2 < config.optical_flow_max_recovered_dist2) {
+          result_transforms[id] = transform_2;
+          result_pyramid_level[id] = pyramid_level[r];
         }
       }
     };
