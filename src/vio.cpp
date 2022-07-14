@@ -734,7 +734,7 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     }
   }
 
-  depth_guess = opt_flow_ptr->depth_guess;
+  depth_guess = it->second->opt_flow_res->input_images->depth_guess;
   bool show_guesses = (show_active_guess || show_same_pixel_guess) &&
                       cam_id == 1 && it != vis_map.end() &&
                       it->second->projections->size() >= 2;

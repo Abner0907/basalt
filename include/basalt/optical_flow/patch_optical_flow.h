@@ -201,6 +201,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
         result;
 
     double depth = depth_guess;
+    transforms->input_images->depth_guess = depth;  // Store guess for UI
 
     MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
     bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;

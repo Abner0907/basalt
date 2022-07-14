@@ -56,6 +56,8 @@ struct OpticalFlowInput {
 
   int64_t t_ns;
   std::vector<ImageData> img_data;
+
+  double depth_guess = -1;
 };
 
 struct OpticalFlowResult {
