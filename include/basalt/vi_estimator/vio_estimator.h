@@ -54,7 +54,8 @@ struct VioVisualizationData {
 
   OpticalFlowResult::Ptr opt_flow_res;
 
-  std::vector<Eigen::aligned_vector<Eigen::Vector4d>> projections;
+  std::shared_ptr<std::vector<Eigen::aligned_vector<Eigen::Vector4d>>>
+      projections;
 
   EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 };

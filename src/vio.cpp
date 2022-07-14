@@ -698,13 +698,13 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    if (it != vis_map.end() && cam_id < it->second->projections.size()) {
-      const auto& points = it->second->projections[cam_id];
+    if (it != vis_map.end() && cam_id < it->second->projections->size()) {
+      const auto& points = it->second->projections->at(cam_id);
 
       if (points.size() > 0) {
         double min_id = points[0][2], max_id = points[0][2];
 
-        for (const auto& points2 : it->second->projections)
+        for (const auto& points2 : *it->second->projections)
           for (const auto& p : points2) {
             min_id = std::min(min_id, p[2]);
             max_id = std::max(max_id, p[2]);
@@ -733,10 +733,10 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
 
   bool show_guesses = (show_active_guess || show_same_pixel_guess) &&
                       cam_id == 1 && it != vis_map.end() &&
-                      it->second->projections.size() >= 2;
+                      it->second->projections->size() >= 2;
   if (show_guesses) {
-    const auto keypoints0 = it->second->projections.at(0);
-    const auto keypoints1 = it->second->projections.at(1);
+    const auto keypoints0 = it->second->projections->at(0);
+    const auto keypoints1 = it->second->projections->at(1);
 
     for (const Eigen::Vector4d& kp1 : keypoints1) {
       double u1 = kp1.x();

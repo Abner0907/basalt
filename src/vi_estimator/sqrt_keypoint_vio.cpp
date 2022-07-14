@@ -485,6 +485,15 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
 
   optimize_and_marg(num_points_connected, lost_landmaks);
 
+  size_t num_cams = opt_flow_meas->observations.size();
+
+  using Projections = std::vector<Eigen::aligned_vector<Eigen::Vector4d>>;
+  std::shared_ptr<Projections> projections = nullptr;
+  if (out_vis_queue) {
+    projections = std::make_shared<Projections>(num_cams);
+    computeProjections(*projections, last_state_t_ns);
+  }
+
   if (out_state_queue) {
     PoseVelBiasStateWithLin p = frame_states.at(last_state_t_ns);
 
@@ -510,8 +519,7 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
 
     get_current_points(data->points, data->point_ids);
 
-    data->projections.resize(opt_flow_meas->observations.size());
-    computeProjections(data->projections, last_state_t_ns);
+    data->projections = projections;
 
     data->opt_flow_res = prev_opt_flow_res[last_state_t_ns];
 
