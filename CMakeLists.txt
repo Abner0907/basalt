@@ -472,10 +472,14 @@ install(FILES ${CONFIG_FILES}
 # Replace install() to do-nothing macro.
 macro(install)
 endmacro()
-# Include subproject (or any other CMake code) with "disabled" install().
-enable_testing()
-add_subdirectory(thirdparty/basalt-headers/test)
-add_subdirectory(test)
+
+if (BUILD_TESTS)
+  # Include subproject (or any other CMake code) with "disabled" install().
+  enable_testing()
+  add_subdirectory(thirdparty/basalt-headers/test)
+  add_subdirectory(test)
+endif()
+
 # Restore original install() behavior.
 macro(install)
   _install(${ARGN})
