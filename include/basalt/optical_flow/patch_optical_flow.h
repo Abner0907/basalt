@@ -77,19 +77,19 @@ class PatchOpticalFlow : public OpticalFlowBase {
 
   PatchOpticalFlow(const VioConfig& config,
                    const basalt::Calibration<double>& calib)
-      : t_ns(-1),
-        frame_counter(0),
-        last_keypoint_id(0),
-        config(config),
-        calib(calib) {
+      : t_ns(-1), frame_counter(0), last_keypoint_id(0), config(config) {
     patches.reserve(3000);
     input_queue.set_capacity(10);
+
+    this->calib = calib.cast<Scalar>();
 
     patch_coord = PatchT::pattern2.template cast<float>();
 
     if (calib.intrinsics.size() > 1) {
+      Eigen::Matrix4d Ed;
       Sophus::SE3d T_i_j = calib.T_i_c[0].inverse() * calib.T_i_c[1];
-      computeEssential(T_i_j, E);
+      computeEssential(T_i_j, Ed);
+      E = Ed.cast<Scalar>();
     }
 
     processing_thread.reset(
@@ -348,19 +348,19 @@ class PatchOpticalFlow : public OpticalFlowBase {
     std::set<KeypointId> lm_to_remove;
 
     std::vector<KeypointId> kpid;
-    Eigen::aligned_vector<Eigen::Vector2d> proj0, proj1;
+    Eigen::aligned_vector<Eigen::Vector2f> proj0, proj1;
 
     for (const auto& kv : transforms->observations.at(1)) {
       auto it = transforms->observations.at(0).find(kv.first);
 
       if (it != transforms->observations.at(0).end()) {
-        proj0.emplace_back(it->second.translation().cast<double>());
-        proj1.emplace_back(kv.second.translation().cast<double>());
+        proj0.emplace_back(it->second.translation());
+        proj1.emplace_back(kv.second.translation());
         kpid.emplace_back(kv.first);
       }
     }
 
-    Eigen::aligned_vector<Eigen::Vector4d> p3d0, p3d1;
+    Eigen::aligned_vector<Eigen::Vector4f> p3d0, p3d1;
     std::vector<bool> p3d0_success, p3d1_success;
 
     calib.intrinsics[0].unproject(proj0, p3d0, p3d0_success);
@@ -393,7 +393,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
   KeypointId last_keypoint_id;
 
   VioConfig config;
-  basalt::Calibration<double> calib;
+  basalt::Calibration<Scalar> calib;
 
   Eigen::aligned_unordered_map<KeypointId, Eigen::aligned_vector<PatchT>>
       patches;
@@ -402,7 +402,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
   std::shared_ptr<std::vector<basalt::ManagedImagePyr<uint16_t>>> old_pyramid,
       pyramid;
 
-  Eigen::Matrix4d E;
+  Matrix4 E;
 
   std::shared_ptr<std::thread> processing_thread;
 };
