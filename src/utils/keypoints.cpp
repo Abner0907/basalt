@@ -160,7 +160,7 @@ void detectKeypointsMapping(const basalt::Image<const uint16_t>& img_raw,
 
 void detectKeypoints(
     const basalt::Image<const uint16_t>& img_raw, KeypointsData& kd,
-    int PATCH_SIZE, int num_points_cell,
+    int PATCH_SIZE, int num_points_cell, int min_threshold, int max_threshold,
     const Eigen::aligned_vector<Eigen::Vector2d>& current_points) {
   kd.corners.clear();
   kd.corner_angles.clear();
@@ -206,9 +206,9 @@ void detectKeypoints(
       }
 
       int points_added = 0;
-      int threshold = 40;
+      int threshold = max_threshold;
 
-      while (points_added < num_points_cell && threshold >= 5) {
+      while (points_added < num_points_cell && threshold >= min_threshold) {
         std::vector<cv::KeyPoint> points;
         cv::FAST(subImg, points, threshold);
 

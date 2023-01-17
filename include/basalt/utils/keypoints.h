@@ -55,7 +55,8 @@ void detectKeypointsMapping(const basalt::Image<const uint16_t>& img_raw,
 
 void detectKeypoints(
     const basalt::Image<const uint16_t>& img_raw, KeypointsData& kd,
-    int PATCH_SIZE = 32, int num_points_cell = 1,
+    int PATCH_SIZE = 32, int num_points_cell = 1, int min_threshold = 5,
+    int max_threshold = 40,
     const Eigen::aligned_vector<Eigen::Vector2d>& current_points =
         Eigen::aligned_vector<Eigen::Vector2d>());
 

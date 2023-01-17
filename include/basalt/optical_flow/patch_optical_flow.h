@@ -331,7 +331,10 @@ class PatchOpticalFlow : public OpticalFlowBase {
     KeypointsData kd;
 
     detectKeypoints(pyramid->at(0).lvl(0), kd,
-                    config.optical_flow_detection_grid_size, 1, pts0);
+                    config.optical_flow_detection_grid_size,
+                    config.optical_flow_detection_num_points_cell,
+                    config.optical_flow_detection_min_threshold,
+                    config.optical_flow_detection_max_threshold, pts0);
 
     Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f> new_poses0,
         new_poses1;
