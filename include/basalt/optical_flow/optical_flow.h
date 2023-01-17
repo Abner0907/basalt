@@ -55,6 +55,10 @@ using Keypoints = Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>;
 struct OpticalFlowInput {
   using Ptr = std::shared_ptr<OpticalFlowInput>;
 
+  OpticalFlowInput(int NUM_CAMS) {
+    img_data.resize(NUM_CAMS);
+  }
+
   int64_t t_ns;
   std::vector<ImageData> img_data;
 
