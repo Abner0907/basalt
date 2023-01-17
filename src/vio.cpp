@@ -99,6 +99,8 @@ pangolin::Var<bool> show_obs("ui.show_obs", true, false, true);
 pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
 pangolin::Var<bool> show_invdist{"ui.show_invdist", false, false, true};
 
+pangolin::Var<bool> show_grid{"ui.show_grid", false, false, true};
+pangolin::Var<bool> show_cam0_proj{"ui.show_cam0_proj", false, false, true};
 pangolin::Var<bool> show_masks{"ui.show_masks", false, false, true};
 
 pangolin::Var<bool> show_guesses{"ui.Show matching guesses", false, false,
@@ -872,6 +874,115 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
          curr_vis_data->opt_flow_res->input_images->masks[cam_id].masks) {
       pangolin::glDrawRect(m.x, m.y, m.x + m.w, m.y + m.h);
     }
+  }
+
+  int C = vio_config.optical_flow_detection_grid_size;
+
+  int w = curr_vis_data->opt_flow_res->input_images->img_data[0].img->w;
+  int h = curr_vis_data->opt_flow_res->input_images->img_data[0].img->h;
+
+  int x_start = (w % C) / 2;
+  int y_start = (h % C) / 2;
+
+  int x_stop = x_start + C * (w / C - 1);
+  int y_stop = y_start + C * (h / C - 1);
+
+  int x_first = x_start + C / 2;
+  int y_first = y_start + C / 2;
+
+  int x_end = x_stop + C;
+  int y_end = y_stop + C;
+
+  int x_last = x_stop + C / 2;
+  int y_last = y_stop + C / 2;
+
+  if (show_cam0_proj) {
+    std::vector<Vector2d> points;
+    auto drawPoint = [&points, w, h, &curr_vis_data](float u, float v, int j,
+                                                     bool draw_c0_uv) {
+      Vector2d ci_uv{u, v};
+      Vector2d c0_uv;
+      double _;
+      bool projected =
+          calib.projectBetweenCams(ci_uv, depth_guess, c0_uv, _, j, 0);
+      bool in_bounds =
+          c0_uv.x() >= 0 && c0_uv.x() < w && c0_uv.y() >= 0 && c0_uv.y() < h;
+      bool valid = projected && in_bounds;
+
+      // Define color
+      GLfloat invalid_color[4] = {1, 0, 0, 0.5};      // red
+      GLfloat in_bounds_color[4] = {1, 0.5, 0, 0.5};  // orange
+      GLfloat projected_color[4] = {1, 0.9, 0, 0.5};  // yellow
+      GLfloat valid_color[4] = {0, 1, 0, 0.5};        // green
+      GLfloat* color = invalid_color;
+      if (valid) {
+        color = valid_color;
+      } else if (projected) {
+        color = projected_color;
+      } else if (in_bounds) {
+        color = in_bounds_color;
+      }
+      glColor4fv(color);
+
+      // Press L key twice in viewer to be able to see out-of-bounds points
+      if (projected) {
+        points.push_back(c0_uv);
+      }
+
+      if (draw_c0_uv) {
+        pangolin::glDrawCircle(c0_uv.x(), c0_uv.y(), 2);
+      } else {
+        pangolin::glDrawCircle(ci_uv.x(), ci_uv.y(), 2);
+      }
+    };
+
+    if (cam_id == 0) {
+      BASALT_ASSERT_MSG(
+          curr_vis_data->opt_flow_res->input_images->img_data.size() == 2,
+          "TODO: UI input for target_cam");
+      int target_cam = 1;  // Hardcoded to cam1, select in UI instead if more
+                           // cams are eventually supported
+
+#if 1  // Draw perimeter of projected-to-cam0 grid
+      int x = x_first;
+      int y = y_first;
+      for (; x <= x_last; x += C) drawPoint(x, y, target_cam, true);
+      for (x = x_last; y <= y_last; y += C) drawPoint(x, y, target_cam, true);
+      for (y = y_last; x >= x_first; x -= C) drawPoint(x, y, target_cam, true);
+      for (x = x_first; y >= y_first; y -= C) drawPoint(x, y, target_cam, true);
+
+#else  // Draw full projected-to-cam0 grid
+      for (int y = x_first; y <= y_last; y += C) {
+        for (int x = y_first; x <= x_last; x += C) {
+          drawPoint(x, y, target_cam, true);
+        }
+      }
+#endif
+
+      glColor4f(0.0, 1.0, 0.0, 0.5);
+      pangolin::glDrawLineLoop(points);
+    } else {
+      for (int y = y_first; y < h; y += C) {
+        for (int x = x_first; x < w; x += C) {
+          drawPoint(x, y, cam_id, false);
+        }
+      }
+    }
+  }
+
+  if (show_grid) {
+    glColor4f(1.0, 0.0, 1.0, 0.25);
+
+    std::vector<Vector2f> grid_lines;
+    for (int x = x_start; x <= x_end; x += C) {
+      grid_lines.emplace_back(x, y_start);
+      grid_lines.emplace_back(x, y_end);
+    }
+    for (int y = y_start; y <= y_end; y += C) {
+      grid_lines.emplace_back(x_start, y);
+      grid_lines.emplace_back(x_end, y);
+    }
+    pangolin::glDrawLines(grid_lines);
   }
 }
 
