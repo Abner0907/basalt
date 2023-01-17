@@ -196,15 +196,13 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
     return true;
   }
 
-  void trackPoints(
-      const basalt::ManagedImagePyr<uint16_t>& pyr_1,
-      const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-      const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-          transform_map_1,
-      const std::map<KeypointId, size_t>& pyramid_levels_1,
-      Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>& transform_map_2,
-      std::map<KeypointId, size_t>& pyramid_levels_2,
-      bool matching = false) const {
+  void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+                   const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+                   const Keypoints& transform_map_1,
+                   const std::map<KeypointId, size_t>& pyramid_levels_1,
+                   Keypoints& transform_map_2,
+                   std::map<KeypointId, size_t>& pyramid_levels_2,
+                   bool matching = false) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -372,8 +370,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
   void addPoints() {
     KeypointsData kd;
 
-    Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f> new_poses_main,
-        new_poses_stereo;
+    Keypoints new_poses_main, new_poses_stereo;
     std::map<KeypointId, size_t> new_pyramid_levels_main,
         new_pyramid_levels_stereo;
 

@@ -176,13 +176,10 @@ class PatchOpticalFlow : public OpticalFlowBase {
     frame_counter++;
   }
 
-  void trackPoints(
-      const basalt::ManagedImagePyr<uint16_t>& pyr_1,
-      const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-      const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-          transform_map_1,
-      Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>& transform_map_2,
-      bool matching = false) const {
+  void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+                   const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+                   const Keypoints& transform_map_1, Keypoints& transform_map_2,
+                   bool matching = false) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -336,8 +333,7 @@ class PatchOpticalFlow : public OpticalFlowBase {
                     config.optical_flow_detection_min_threshold,
                     config.optical_flow_detection_max_threshold, pts0);
 
-    Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f> new_poses0,
-        new_poses1;
+    Keypoints new_poses0, new_poses1;
 
     for (size_t i = 0; i < kd.corners.size(); i++) {
       Eigen::aligned_vector<PatchT>& p = patches[last_keypoint_id];

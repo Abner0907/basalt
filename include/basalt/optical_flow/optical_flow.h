@@ -50,6 +50,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace basalt {
 
 using KeypointId = size_t;
+using Keypoints = Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>;
 
 struct OpticalFlowInput {
   using Ptr = std::shared_ptr<OpticalFlowInput>;
@@ -64,8 +65,7 @@ struct OpticalFlowResult {
   using Ptr = std::shared_ptr<OpticalFlowResult>;
 
   int64_t t_ns;
-  std::vector<Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>>
-      observations;
+  std::vector<Keypoints> observations;
 
   std::vector<std::map<KeypointId, size_t>> pyramid_levels;
 
