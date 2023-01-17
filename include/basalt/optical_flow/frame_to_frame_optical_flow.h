@@ -164,7 +164,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       for (size_t i = 0; i < calib.intrinsics.size(); i++) {
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
-                    new_transforms->observations[i]);
+                    new_transforms->observations[i], i, i);
       }
 
       transforms = new_transforms;
@@ -184,7 +184,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
                    const Keypoints& transform_map_1, Keypoints& transform_map_2,
-                   bool matching = false) const {
+                   size_t cam1, size_t cam2) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -205,6 +205,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     double depth = depth_guess;
     transforms->input_images->depth_guess = depth;  // Store guess for UI
 
+    bool matching = cam1 != cam2;
     MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
     bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
     const bool use_depth = matching && guess_requires_depth;
@@ -221,7 +222,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
         Eigen::Vector2f off{0, 0};
         if (use_depth) {
-          off = calib.viewOffset(t1, depth);
+          off = calib.viewOffset(t1, depth, cam1, cam2);
         }
 
         t2 -= off;  // This modifies transform_2
@@ -355,7 +356,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
 
     if (calib.intrinsics.size() > 1) {
-      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1, true);
+      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1, 0, 1);
 
       for (const auto& kv : new_poses1) {
         transforms->observations.at(1).emplace(kv);

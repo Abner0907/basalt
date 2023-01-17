@@ -177,6 +177,7 @@ basalt::VioEstimatorBase::Ptr vio;
 void feed_images() {
   std::cout << "Started input_data thread " << std::endl;
 
+  int NUM_CAMS = calib.intrinsics.size();
   for (size_t i = 0; i < vio_dataset->get_image_timestamps().size(); i++) {
     if (vio->finished || terminate || (max_frames > 0 && i >= max_frames)) {
       // stop loop early if we set a limit on number of frames to process
@@ -188,7 +189,7 @@ void feed_images() {
       cvar.wait(lk);
     }
 
-    basalt::OpticalFlowInput::Ptr data(new basalt::OpticalFlowInput);
+    basalt::OpticalFlowInput::Ptr data(new basalt::OpticalFlowInput(NUM_CAMS));
 
     data->t_ns = vio_dataset->get_image_timestamps()[i];
     data->img_data = vio_dataset->get_image_data(data->t_ns);
@@ -794,14 +795,14 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
             // Guess if we were using REPROJ_FIX_DEPTH
             if (show_reproj_fix_depth_guess) {
               glColor3f(1, 1, 0);  // Yellow
-              auto off = calib.viewOffset({u0, v0}, fixed_depth);
+              auto off = calib.viewOffset({u0, v0}, fixed_depth, 0, 1);
               pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
             }
 
             // Guess if we were using REPROJ_AVG_DEPTH
             if (show_reproj_avg_depth_guess) {
               glColor3f(1, 0, 1);  // Magenta
-              auto off = calib.viewOffset({u0, v0}, avg_depth);
+              auto off = calib.viewOffset({u0, v0}, avg_depth, 0, 1);
               pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
             }
 
@@ -813,7 +814,8 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
                   MatchingGuessType::SAME_PIXEL) {
                 off = calib.viewOffset(
                     {u0, v0},
-                    curr_vis_data->opt_flow_res->input_images->depth_guess);
+                    curr_vis_data->opt_flow_res->input_images->depth_guess, 0,
+                    1);
               }
               pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
             }

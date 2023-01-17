@@ -170,7 +170,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i], transforms->pyramid_levels[i],
                     new_transforms->observations[i],
-                    new_transforms->pyramid_levels[i]);
+                    new_transforms->pyramid_levels[i], i, i);
       }
 
       // std::cout << t_ns << ": Could track "
@@ -201,8 +201,8 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
                    const Keypoints& transform_map_1,
                    const std::map<KeypointId, size_t>& pyramid_levels_1,
                    Keypoints& transform_map_2,
-                   std::map<KeypointId, size_t>& pyramid_levels_2,
-                   bool matching = false) const {
+                   std::map<KeypointId, size_t>& pyramid_levels_2,  //
+                   size_t cam1, size_t cam2) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -228,6 +228,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
     double depth = depth_guess;
     transforms->input_images->depth_guess = depth;  // Store guess for UI
 
+    bool matching = cam1 != cam2;
     MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
     bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
     const bool use_depth = matching && guess_requires_depth;
@@ -244,7 +245,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
 
         Eigen::Vector2f off{0, 0};
         if (use_depth) {
-          off = calib.viewOffset(t1, depth);
+          off = calib.viewOffset(t1, depth, cam1, cam2);
         }
 
         t2 -= off;  // This modifies transform_2
@@ -416,7 +417,7 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
 
       trackPoints(pyramid->at(0), pyramid->at(1), new_poses_main,
                   new_pyramid_levels_main, new_poses_stereo,
-                  new_pyramid_levels_stereo, true);
+                  new_pyramid_levels_stereo, 0, 1);
 
       for (const auto& kv : new_poses_stereo) {
         transforms->observations.at(1).emplace(kv);
