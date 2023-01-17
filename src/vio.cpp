@@ -99,6 +99,8 @@ pangolin::Var<bool> show_obs("ui.show_obs", true, false, true);
 pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
 pangolin::Var<bool> show_invdist{"ui.show_invdist", false, false, true};
 
+pangolin::Var<bool> show_masks{"ui.show_masks", false, false, true};
+
 pangolin::Var<bool> show_guesses{"ui.Show matching guesses", false, false,
                                  true};
 pangolin::Var<bool> show_same_pixel_guess{"ui.SAME_PIXEL", true, false, true};
@@ -857,6 +859,19 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     pangolin::GlFont::I()
         .Text("%d opt_flow patches", kp_map.size())
         .Draw(5, 20);
+  }
+
+  if (!curr_vis_data || !curr_vis_data->opt_flow_res ||
+      !curr_vis_data->opt_flow_res->input_images) {
+    return;
+  }
+
+  if (show_masks) {
+    glColor4f(0.0, 1.0, 1.0, 0.1);
+    for (const Rect& m :
+         curr_vis_data->opt_flow_res->input_images->masks[cam_id].masks) {
+      pangolin::glDrawRect(m.x, m.y, m.x + m.w, m.y + m.h);
+    }
   }
 }
 

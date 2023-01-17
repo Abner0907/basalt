@@ -164,7 +164,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       for (size_t i = 0; i < calib.intrinsics.size(); i++) {
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
-                    new_transforms->observations[i], i, i);
+                    new_transforms->observations[i], new_img_vec->masks.at(i),
+                    new_img_vec->masks.at(i), i, i);
       }
 
       transforms = new_transforms;
@@ -184,6 +185,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
   void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
                    const Keypoints& transform_map_1, Keypoints& transform_map_2,
+                   const Masks& masks1, const Masks& masks2,  //
                    size_t cam1, size_t cam2) const {
     size_t num_points = transform_map_1.size();
 
@@ -220,6 +222,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
         auto t1 = transform_1.translation();
         auto t2 = transform_2.translation();
 
+        if (masks1.inBounds(t1.x(), t1.y())) continue;
+
         Eigen::Vector2f off{0, 0};
         if (use_depth) {
           off = calib.viewOffset(t1, depth, cam1, cam2);
@@ -233,6 +237,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
         valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
         if (!valid) continue;
+
+        if (masks2.inBounds(t2.x(), t2.y())) continue;
 
         Eigen::AffineCompact2f transform_1_recovered = transform_2;
         auto t1_recovered = transform_1_recovered.translation();
@@ -340,7 +346,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                     config.optical_flow_detection_grid_size,
                     config.optical_flow_detection_num_points_cell,
                     config.optical_flow_detection_min_threshold,
-                    config.optical_flow_detection_max_threshold, pts0);
+                    config.optical_flow_detection_max_threshold,
+                    transforms->input_images->masks.at(0), pts0);
 
     Keypoints new_poses0, new_poses1;
 
@@ -356,7 +363,9 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
 
     if (calib.intrinsics.size() > 1) {
-      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1, 0, 1);
+      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1,
+                  transforms->input_images->masks.at(0),
+                  transforms->input_images->masks.at(1), 0, 1);
 
       for (const auto& kv : new_poses1) {
         transforms->observations.at(1).emplace(kv);

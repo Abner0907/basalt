@@ -41,6 +41,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <basalt/utils/vio_config.h>
 
 #include <basalt/io/dataset_io.h>
+#include <basalt/utils/keypoints.h>
 #include <basalt/calibration/calibration.hpp>
 #include <basalt/camera/stereographic_param.hpp>
 #include <basalt/utils/sophus_utils.hpp>
@@ -57,12 +58,14 @@ struct OpticalFlowInput {
 
   OpticalFlowInput(int NUM_CAMS) {
     img_data.resize(NUM_CAMS);
+    masks.resize(NUM_CAMS);
   }
 
   int64_t t_ns;
   std::vector<ImageData> img_data;
 
   double depth_guess = -1;
+  std::vector<Masks> masks;  //!< Regions of the image to ignore
 };
 
 struct OpticalFlowResult {

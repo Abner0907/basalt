@@ -397,7 +397,8 @@ class MultiscaleFrameToFrameOpticalFlow : public OpticalFlowBase {
                       config.optical_flow_detection_grid_size,
                       config.optical_flow_detection_num_points_cell,
                       config.optical_flow_detection_min_threshold,
-                      config.optical_flow_detection_max_threshold, pts);
+                      config.optical_flow_detection_max_threshold,
+                      transforms->input_images->masks.at(0), pts);
 
       const Scalar scale = 1 << level;
 
