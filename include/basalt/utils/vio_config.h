@@ -51,6 +51,7 @@ struct VioConfig {
   int optical_flow_detection_num_points_cell;
   int optical_flow_detection_min_threshold;
   int optical_flow_detection_max_threshold;
+  bool optical_flow_detection_nonoverlap;
   float optical_flow_max_recovered_dist2;
   int optical_flow_pattern;
   int optical_flow_max_iterations;

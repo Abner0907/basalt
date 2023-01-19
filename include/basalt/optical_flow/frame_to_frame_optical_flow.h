@@ -414,6 +414,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       transforms->observations.at(i).insert(kps.begin(), kps.end());
 
       // Update masks and detect features on area not overlapping with cam0
+      if (!config.optical_flow_detection_nonoverlap) continue;
       ms += cam0OverlapCellsMasksForCam(i);
       Keypoints kps_no = addPointsForCamera(i);
     }
