@@ -420,7 +420,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
   }
 
-  void filterPoints() {
+  void filterPointsForCam(int cam_id) {
     if (calib.intrinsics.size() < 2) return;
 
     std::set<KeypointId> lm_to_remove;
@@ -428,7 +428,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     std::vector<KeypointId> kpid;
     Eigen::aligned_vector<Eigen::Vector2f> proj0, proj1;
 
-    for (const auto& kv : transforms->observations.at(1)) {
+    for (const auto& kv : transforms->observations.at(cam_id)) {
       auto it = transforms->observations.at(0).find(kv.first);
 
       if (it != transforms->observations.at(0).end()) {
@@ -442,7 +442,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     std::vector<bool> p3d0_success, p3d1_success;
 
     calib.intrinsics[0].unproject(proj0, p3d0, p3d0_success);
-    calib.intrinsics[1].unproject(proj1, p3d1, p3d1_success);
+    calib.intrinsics[cam_id].unproject(proj1, p3d1, p3d1_success);
 
     for (size_t i = 0; i < p3d0_success.size(); i++) {
       if (p3d0_success[i] && p3d1_success[i]) {
@@ -458,7 +458,14 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
 
     for (int id : lm_to_remove) {
-      transforms->observations.at(1).erase(id);
+      transforms->observations.at(cam_id).erase(id);
+    }
+  }
+
+  void filterPoints() {
+    const int NUM_CAMS = calib.intrinsics.size();
+    for (int i = 1; i < NUM_CAMS; i++) {
+      filterPointsForCam(i);
     }
   }
 
