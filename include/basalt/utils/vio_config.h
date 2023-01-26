@@ -39,6 +39,7 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 namespace basalt {
 
 enum class LinearizationType { ABS_QR, ABS_SC, REL_SC };
+enum class MatchingGuessType { SAME_PIXEL, REPROJ_FIX_DEPTH, REPROJ_AVG_DEPTH };
 
 struct VioConfig {
   VioConfig();
@@ -47,12 +48,18 @@ struct VioConfig {
 
   std::string optical_flow_type;
   int optical_flow_detection_grid_size;
+  int optical_flow_detection_num_points_cell;
+  int optical_flow_detection_min_threshold;
+  int optical_flow_detection_max_threshold;
+  bool optical_flow_detection_nonoverlap;
   float optical_flow_max_recovered_dist2;
   int optical_flow_pattern;
   int optical_flow_max_iterations;
   int optical_flow_levels;
   float optical_flow_epipolar_error;
   int optical_flow_skip_frames;
+  MatchingGuessType optical_flow_matching_guess_type;
+  float optical_flow_matching_default_depth;
 
   LinearizationType vio_linearization_type;
   bool vio_sqrt_marg;

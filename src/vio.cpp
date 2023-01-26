@@ -70,6 +70,8 @@ OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 // enable the "..."_format(...) string literal
 using namespace basalt::literals;
+using namespace basalt;
+using namespace Eigen;
 
 // GUI functions
 void draw_image_overlay(pangolin::View& v, size_t cam_id);
@@ -95,6 +97,24 @@ pangolin::Var<int> show_frame("ui.show_frame", 0, 0, 1500);
 pangolin::Var<bool> show_flow("ui.show_flow", false, false, true);
 pangolin::Var<bool> show_obs("ui.show_obs", true, false, true);
 pangolin::Var<bool> show_ids("ui.show_ids", false, false, true);
+pangolin::Var<bool> show_invdist{"ui.show_invdist", false, false, true};
+
+pangolin::Var<bool> show_grid{"ui.show_grid", false, false, true};
+pangolin::Var<bool> show_cam0_proj{"ui.show_cam0_proj", false, false, true};
+pangolin::Var<bool> show_masks{"ui.show_masks", false, false, true};
+
+pangolin::Var<bool> show_guesses{"ui.Show matching guesses", false, false,
+                                 true};
+pangolin::Var<bool> show_same_pixel_guess{"ui.SAME_PIXEL", true, false, true};
+pangolin::Var<bool> show_reproj_avg_depth_guess{"ui.REPROJ_AVG_DEPTH", true,
+                                                false, true};
+pangolin::Var<bool> show_reproj_fix_depth_guess{"ui.REPROJ_FIX_DEPTH", true,
+                                                false, true};
+pangolin::Var<double> fixed_depth{"ui.FIX_DEPTH", 2, 0, 3};
+pangolin::Var<bool> show_active_guess{"ui.Active Guess", true, false, true};
+
+pangolin::Var<double> depth_guess{"ui.depth_guess", 2,
+                                  pangolin::META_FLAG_READONLY};
 
 pangolin::Var<bool> show_est_pos("ui.show_est_pos", true, false, true);
 pangolin::Var<bool> show_est_vel("ui.show_est_vel", false, false, true);
@@ -143,7 +163,7 @@ size_t last_frame_processed = 0;
 tbb::concurrent_unordered_map<int64_t, int, std::hash<int64_t>> timestamp_to_id;
 
 std::mutex m;
-std::condition_variable cv;
+std::condition_variable cvar;
 bool step_by_step = false;
 size_t max_frames = 0;
 
@@ -161,6 +181,7 @@ basalt::VioEstimatorBase::Ptr vio;
 void feed_images() {
   std::cout << "Started input_data thread " << std::endl;
 
+  int NUM_CAMS = calib.intrinsics.size();
   for (size_t i = 0; i < vio_dataset->get_image_timestamps().size(); i++) {
     if (vio->finished || terminate || (max_frames > 0 && i >= max_frames)) {
       // stop loop early if we set a limit on number of frames to process
@@ -169,10 +190,10 @@ void feed_images() {
 
     if (step_by_step) {
       std::unique_lock<std::mutex> lk(m);
-      cv.wait(lk);
+      cvar.wait(lk);
     }
 
-    basalt::OpticalFlowInput::Ptr data(new basalt::OpticalFlowInput);
+    basalt::OpticalFlowInput::Ptr data(new basalt::OpticalFlowInput(NUM_CAMS));
 
     data->t_ns = vio_dataset->get_image_timestamps()[i];
     data->img_data = vio_dataset->get_image_data(data->t_ns);
@@ -310,6 +331,7 @@ int main(int argc, char** argv) {
     opt_flow_ptr->output_queue = &vio->vision_data_queue;
     if (show_gui) vio->out_vis_queue = &out_vis_queue;
     vio->out_state_queue = &out_state_queue;
+    vio->opt_flow_depth_guess_queue = &opt_flow_ptr->input_depth_queue;
   }
 
   basalt::MargDataSaver::Ptr marg_data_saver;
@@ -442,6 +464,7 @@ int main(int argc, char** argv) {
     std::vector<std::shared_ptr<pangolin::ImageView>> img_view;
     while (img_view.size() < calib.intrinsics.size()) {
       std::shared_ptr<pangolin::ImageView> iv(new pangolin::ImageView);
+      iv->UseNN() = true;  // Disable antialiasing, can be toggled with N key
 
       size_t idx = img_view.size();
       img_view.push_back(iv);
@@ -473,11 +496,10 @@ int main(int argc, char** argv) {
     while (!pangolin::ShouldQuit()) {
       glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+      size_t frame_id = show_frame;
+      int64_t t_ns = vio_dataset->get_image_timestamps()[frame_id];
+      auto it = vis_map.find(t_ns);
       if (follow) {
-        size_t frame_id = show_frame;
-        int64_t t_ns = vio_dataset->get_image_timestamps()[frame_id];
-        auto it = vis_map.find(t_ns);
-
         if (it != vis_map.end()) {
           Sophus::SE3d T_w_i;
           if (!it->second->states.empty()) {
@@ -495,6 +517,14 @@ int main(int argc, char** argv) {
       glClearColor(1.0f, 1.0f, 1.0f, 1.0f);
 
       img_view_display.Activate();
+      if (fixed_depth.GuiChanged() &&
+          vio->opt_flow_depth_guess_queue != nullptr) {
+        vio->opt_flow_depth_guess_queue->push(fixed_depth);
+        depth_guess = fixed_depth;
+      } else if (it != vis_map.end() && it->second->opt_flow_res &&
+                 it->second->opt_flow_res->input_images) {
+        depth_guess = it->second->opt_flow_res->input_images->depth_guess;
+      }
 
       if (show_frame.GuiChanged()) {
         for (size_t cam_id = 0; cam_id < calib.intrinsics.size(); cam_id++) {
@@ -686,6 +716,8 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
 
   size_t frame_id = show_frame;
   auto it = vis_map.find(vio_dataset->get_image_timestamps()[frame_id]);
+  if (it == vis_map.end()) return;
+  basalt::VioVisualizationData::Ptr curr_vis_data = it->second;
 
   if (show_obs) {
     glLineWidth(1.0);
@@ -693,13 +725,13 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    if (it != vis_map.end() && cam_id < it->second->projections.size()) {
-      const auto& points = it->second->projections[cam_id];
+    if (cam_id < curr_vis_data->projections->size()) {
+      const auto& points = curr_vis_data->projections->at(cam_id);
 
       if (points.size() > 0) {
         double min_id = points[0][2], max_id = points[0][2];
 
-        for (const auto& points2 : it->second->projections)
+        for (const auto& points2 : *curr_vis_data->projections)
           for (const auto& p : points2) {
             min_id = std::min(min_id, p[2]);
             max_id = std::max(max_id, p[2]);
@@ -716,9 +748,84 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
 
           if (show_ids)
             pangolin::GlFont::I().Text("%d", int(c[3])).Draw(c[0], c[1]);
+          if (show_invdist)
+            pangolin::GlFont::I().Text("%.3lf", c[2]).Draw(c[0], c[1] + 5);
         }
       }
 
+      if (show_guesses && cam_id == 1) {
+        const auto keypoints0 = curr_vis_data->projections->at(0);
+        const auto keypoints1 = curr_vis_data->projections->at(1);
+
+        double avg_invdepth = 0;
+        double num_features = 0;
+        for (const auto& cam_projs : *curr_vis_data->projections) {
+          for (const Vector4d& v : cam_projs) avg_invdepth += v.z();
+          num_features += cam_projs.size();
+        }
+        bool valid = avg_invdepth > 0 && num_features > 0;
+        float default_depth = vio_config.optical_flow_matching_default_depth;
+        double avg_depth = valid ? num_features / avg_invdepth : default_depth;
+
+        for (const Vector4d kp1 : keypoints1) {
+          double u1 = kp1.x();
+          double v1 = kp1.y();
+          // double invdist1 = kp1.z();
+          double id1 = kp1.w();
+
+          double u0 = 0;
+          double v0 = 0;
+          bool found = false;
+          for (const Vector4d& kp0 : keypoints0) {  // Find match in keypoints0
+            double id0 = kp0.w();
+            if (id1 != id0) continue;
+            u0 = kp0.x();
+            v0 = kp0.y();
+            found = true;
+            break;
+          }
+
+          // Display guess error if this is a stereo feature
+          // NOTE: keep in mind that these guesses are not really the guesses
+          // used to detect the feature, but the guess we would use if we were
+          // to detect the feature right now.
+          if (found) {
+            // Guess if we were using SAME_PIXEL
+            if (show_same_pixel_guess) {
+              glColor3f(0, 1, 1);  // Cyan
+              pangolin::glDrawLine(u1, v1, u0, v0);
+            }
+
+            // Guess if we were using REPROJ_FIX_DEPTH
+            if (show_reproj_fix_depth_guess) {
+              glColor3f(1, 1, 0);  // Yellow
+              auto off = calib.viewOffset({u0, v0}, fixed_depth, 0, 1);
+              pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
+            }
+
+            // Guess if we were using REPROJ_AVG_DEPTH
+            if (show_reproj_avg_depth_guess) {
+              glColor3f(1, 0, 1);  // Magenta
+              auto off = calib.viewOffset({u0, v0}, avg_depth, 0, 1);
+              pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
+            }
+
+            // Guess with the current guess type
+            if (show_active_guess) {
+              glColor3f(1, 0, 0);  // Red
+              Vector2d off{0, 0};
+              if (vio_config.optical_flow_matching_guess_type !=
+                  MatchingGuessType::SAME_PIXEL) {
+                off = calib.viewOffset(
+                    {u0, v0},
+                    curr_vis_data->opt_flow_res->input_images->depth_guess, 0,
+                    1);
+              }
+              pangolin::glDrawLine(u1, v1, u0 - off.x(), v0 - off.y());
+            }
+          }
+        }
+      }
       glColor3f(1.0, 0.0, 0.0);
       pangolin::GlFont::I()
           .Text("Tracked %d points", points.size())
@@ -732,30 +839,150 @@ void draw_image_overlay(pangolin::View& v, size_t cam_id) {
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    if (it != vis_map.end()) {
-      const Eigen::aligned_map<basalt::KeypointId, Eigen::AffineCompact2f>&
-          kp_map = it->second->opt_flow_res->observations[cam_id];
+    const Eigen::aligned_map<basalt::KeypointId, Eigen::AffineCompact2f>&
+        kp_map = curr_vis_data->opt_flow_res->observations[cam_id];
 
-      for (const auto& kv : kp_map) {
-        Eigen::MatrixXf transformed_patch =
-            kv.second.linear() * opt_flow_ptr->patch_coord;
-        transformed_patch.colwise() += kv.second.translation();
+    for (const auto& kv : kp_map) {
+      Eigen::MatrixXf transformed_patch =
+          kv.second.linear() * opt_flow_ptr->patch_coord;
+      transformed_patch.colwise() += kv.second.translation();
 
-        for (int i = 0; i < transformed_patch.cols(); i++) {
-          const Eigen::Vector2f c = transformed_patch.col(i);
-          pangolin::glDrawCirclePerimeter(c[0], c[1], 0.5f);
-        }
-
-        const Eigen::Vector2f c = kv.second.translation();
-
-        if (show_ids)
-          pangolin::GlFont::I().Text("%d", kv.first).Draw(5 + c[0], 5 + c[1]);
+      for (int i = 0; i < transformed_patch.cols(); i++) {
+        const Eigen::Vector2f c = transformed_patch.col(i);
+        pangolin::glDrawCirclePerimeter(c[0], c[1], 0.5f);
       }
 
-      pangolin::GlFont::I()
-          .Text("%d opt_flow patches", kp_map.size())
-          .Draw(5, 20);
+      const Eigen::Vector2f c = kv.second.translation();
+
+      if (show_ids)
+        pangolin::GlFont::I().Text("%d", kv.first).Draw(5 + c[0], 5 + c[1]);
     }
+
+    pangolin::GlFont::I()
+        .Text("%d opt_flow patches", kp_map.size())
+        .Draw(5, 20);
+  }
+
+  if (!curr_vis_data || !curr_vis_data->opt_flow_res ||
+      !curr_vis_data->opt_flow_res->input_images) {
+    return;
+  }
+
+  if (show_masks) {
+    glColor4f(0.0, 1.0, 1.0, 0.1);
+    for (const Rect& m :
+         curr_vis_data->opt_flow_res->input_images->masks[cam_id].masks) {
+      pangolin::glDrawRect(m.x, m.y, m.x + m.w, m.y + m.h);
+    }
+  }
+
+  int C = vio_config.optical_flow_detection_grid_size;
+
+  int w = curr_vis_data->opt_flow_res->input_images->img_data[0].img->w;
+  int h = curr_vis_data->opt_flow_res->input_images->img_data[0].img->h;
+
+  int x_start = (w % C) / 2;
+  int y_start = (h % C) / 2;
+
+  int x_stop = x_start + C * (w / C - 1);
+  int y_stop = y_start + C * (h / C - 1);
+
+  int x_first = x_start + C / 2;
+  int y_first = y_start + C / 2;
+
+  int x_end = x_stop + C;
+  int y_end = y_stop + C;
+
+  int x_last = x_stop + C / 2;
+  int y_last = y_stop + C / 2;
+
+  if (show_cam0_proj) {
+    std::vector<Vector2d> points;
+    auto drawPoint = [&points, w, h, &curr_vis_data](float u, float v, int j,
+                                                     bool draw_c0_uv) {
+      Vector2d ci_uv{u, v};
+      Vector2d c0_uv;
+      double _;
+      bool projected =
+          calib.projectBetweenCams(ci_uv, depth_guess, c0_uv, _, j, 0);
+      bool in_bounds =
+          c0_uv.x() >= 0 && c0_uv.x() < w && c0_uv.y() >= 0 && c0_uv.y() < h;
+      bool valid = projected && in_bounds;
+
+      // Define color
+      GLfloat invalid_color[4] = {1, 0, 0, 0.5};      // red
+      GLfloat in_bounds_color[4] = {1, 0.5, 0, 0.5};  // orange
+      GLfloat projected_color[4] = {1, 0.9, 0, 0.5};  // yellow
+      GLfloat valid_color[4] = {0, 1, 0, 0.5};        // green
+      GLfloat* color = invalid_color;
+      if (valid) {
+        color = valid_color;
+      } else if (projected) {
+        color = projected_color;
+      } else if (in_bounds) {
+        color = in_bounds_color;
+      }
+      glColor4fv(color);
+
+      // Press L key twice in viewer to be able to see out-of-bounds points
+      if (projected) {
+        points.push_back(c0_uv);
+      }
+
+      if (draw_c0_uv) {
+        pangolin::glDrawCircle(c0_uv.x(), c0_uv.y(), 2);
+      } else {
+        pangolin::glDrawCircle(ci_uv.x(), ci_uv.y(), 2);
+      }
+    };
+
+    if (cam_id == 0) {
+      BASALT_ASSERT_MSG(
+          curr_vis_data->opt_flow_res->input_images->img_data.size() == 2,
+          "TODO: UI input for target_cam");
+      int target_cam = 1;  // Hardcoded to cam1, select in UI instead if more
+                           // cams are eventually supported
+
+#if 1  // Draw perimeter of projected-to-cam0 grid
+      int x = x_first;
+      int y = y_first;
+      for (; x <= x_last; x += C) drawPoint(x, y, target_cam, true);
+      for (x = x_last; y <= y_last; y += C) drawPoint(x, y, target_cam, true);
+      for (y = y_last; x >= x_first; x -= C) drawPoint(x, y, target_cam, true);
+      for (x = x_first; y >= y_first; y -= C) drawPoint(x, y, target_cam, true);
+
+#else  // Draw full projected-to-cam0 grid
+      for (int y = x_first; y <= y_last; y += C) {
+        for (int x = y_first; x <= x_last; x += C) {
+          drawPoint(x, y, target_cam, true);
+        }
+      }
+#endif
+
+      glColor4f(0.0, 1.0, 0.0, 0.5);
+      pangolin::glDrawLineLoop(points);
+    } else {
+      for (int y = y_first; y < h; y += C) {
+        for (int x = x_first; x < w; x += C) {
+          drawPoint(x, y, cam_id, false);
+        }
+      }
+    }
+  }
+
+  if (show_grid) {
+    glColor4f(1.0, 0.0, 1.0, 0.25);
+
+    std::vector<Vector2f> grid_lines;
+    for (int x = x_start; x <= x_end; x += C) {
+      grid_lines.emplace_back(x, y_start);
+      grid_lines.emplace_back(x, y_end);
+    }
+    for (int y = y_start; y <= y_end; y += C) {
+      grid_lines.emplace_back(x_start, y);
+      grid_lines.emplace_back(x_end, y);
+    }
+    pangolin::glDrawLines(grid_lines);
   }
 }
 
@@ -829,7 +1056,7 @@ bool next_step() {
   if (show_frame < int(vio_dataset->get_image_timestamps().size()) - 1) {
     show_frame = show_frame + 1;
     show_frame.Meta().gui_changed = true;
-    cv.notify_one();
+    cvar.notify_one();
     return true;
   } else {
     return false;
