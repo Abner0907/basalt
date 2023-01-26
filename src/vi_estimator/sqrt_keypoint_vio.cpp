@@ -162,12 +162,14 @@ void SqrtKeypointVioEstimator<Scalar_>::initialize(const Eigen::Vector3d& bg_,
     const Vec3 gyro_cov = calib.dicrete_time_gyro_noise_std().array().square();
 
     typename ImuData<Scalar>::Ptr data = popFromImuDataQueue();
-    BASALT_ASSERT_MSG(data, "first IMU measurment is nullptr");
 
-    data->accel = calib.calib_accel_bias.getCalibrated(data->accel);
-    data->gyro = calib.calib_gyro_bias.getCalibrated(data->gyro);
+    bool run = data != nullptr;  // End VIO otherwise
+    if (run) {
+      data->accel = calib.calib_accel_bias.getCalibrated(data->accel);
+      data->gyro = calib.calib_gyro_bias.getCalibrated(data->gyro);
+    }
 
-    while (true) {
+    while (run) {
       vision_data_queue.pop(curr_frame);
 
       if (config.vio_enforce_realtime) {
@@ -483,11 +485,38 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
 
   optimize_and_marg(num_points_connected, lost_landmaks);
 
+  size_t num_cams = opt_flow_meas->observations.size();
+  bool avg_depth_needed =
+      opt_flow_depth_guess_queue && config.optical_flow_matching_guess_type ==
+                                        MatchingGuessType::REPROJ_AVG_DEPTH;
+
+  using Projections = std::vector<Eigen::aligned_vector<Eigen::Vector4d>>;
+  std::shared_ptr<Projections> projections = nullptr;
+  if (out_vis_queue || avg_depth_needed) {
+    projections = std::make_shared<Projections>(num_cams);
+    computeProjections(*projections, last_state_t_ns);
+  }
+
   if (out_state_queue) {
     PoseVelBiasStateWithLin p = frame_states.at(last_state_t_ns);
 
     typename PoseVelBiasState<double>::Ptr data(
         new PoseVelBiasState<double>(p.getState().template cast<double>()));
+
+    if (avg_depth_needed) {
+      double avg_invdepth = 0;
+      double num_features = 0;
+      for (const auto& cam_projs : *projections) {
+        for (const Eigen::Vector4d& v : cam_projs) avg_invdepth += v.z();
+        num_features += cam_projs.size();
+      }
+
+      bool valid = avg_invdepth > 0 && num_features > 0;
+      float default_depth = config.optical_flow_matching_default_depth;
+      double avg_depth = valid ? num_features / avg_invdepth : default_depth;
+
+      opt_flow_depth_guess_queue->push(avg_depth);
+    }
 
     out_state_queue->push(data);
   }
@@ -508,8 +537,7 @@ bool SqrtKeypointVioEstimator<Scalar_>::measure(
 
     get_current_points(data->points, data->point_ids);
 
-    data->projections.resize(opt_flow_meas->observations.size());
-    computeProjections(data->projections, last_state_t_ns);
+    data->projections = projections;
 
     data->opt_flow_res = prev_opt_flow_res[last_state_t_ns];
 

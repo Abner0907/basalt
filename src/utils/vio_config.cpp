@@ -48,12 +48,14 @@ VioConfig::VioConfig() {
   // optical_flow_type = "patch";
   optical_flow_type = "frame_to_frame";
   optical_flow_detection_grid_size = 50;
-  optical_flow_max_recovered_dist2 = 0.09f;
+  optical_flow_max_recovered_dist2 = 0.04f;
   optical_flow_pattern = 51;
   optical_flow_max_iterations = 5;
   optical_flow_levels = 3;
   optical_flow_epipolar_error = 0.005;
   optical_flow_skip_frames = 1;
+  optical_flow_matching_guess_type = MatchingGuessType::REPROJ_AVG_DEPTH;
+  optical_flow_matching_default_depth = 2.0;
 
   vio_linearization_type = LinearizationType::ABS_QR;
   vio_sqrt_marg = true;
@@ -74,12 +76,14 @@ VioConfig::VioConfig() {
 
   vio_enforce_realtime = false;
 
-  vio_use_lm = false;
+  vio_use_lm = true;
   vio_lm_lambda_initial = 1e-4;
   vio_lm_lambda_min = 1e-6;
   vio_lm_lambda_max = 1e2;
+  // vio_lm_landmark_damping_variant = 1;
+  // vio_lm_pose_damping_variant = 1;
 
-  vio_scale_jacobian = true;
+  vio_scale_jacobian = false;
 
   vio_init_pose_weight = 1e8;
   vio_init_ba_weight = 1e1;
@@ -104,9 +108,9 @@ VioConfig::VioConfig() {
   mapper_no_factor_weights = false;
   mapper_use_factors = true;
 
-  mapper_use_lm = false;
+  mapper_use_lm = true;
   mapper_lm_lambda_min = 1e-32;
-  mapper_lm_lambda_max = 1e2;
+  mapper_lm_lambda_max = 1e3;
 }
 
 void VioConfig::save(const std::string& filename) {
@@ -131,6 +135,30 @@ void VioConfig::load(const std::string& filename) {
 }  // namespace basalt
 
 namespace cereal {
+
+template <class Archive>
+std::string save_minimal(const Archive& ar,
+                         const basalt::MatchingGuessType& guess_type) {
+  UNUSED(ar);
+  auto name = magic_enum::enum_name(guess_type);
+  return std::string(name);
+}
+
+template <class Archive>
+void load_minimal(const Archive& ar, basalt::MatchingGuessType& guess_type,
+                  const std::string& name) {
+  UNUSED(ar);
+
+  auto guess_enum = magic_enum::enum_cast<basalt::MatchingGuessType>(name);
+
+  if (guess_enum.has_value()) {
+    guess_type = guess_enum.value();
+  } else {
+    std::cerr << "Could not find the MatchingGuessType for " << name
+              << std::endl;
+    std::abort();
+  }
+}
 
 template <class Archive>
 std::string save_minimal(const Archive& ar,
@@ -167,6 +195,8 @@ void serialize(Archive& ar, basalt::VioConfig& config) {
   ar(CEREAL_NVP(config.optical_flow_epipolar_error));
   ar(CEREAL_NVP(config.optical_flow_levels));
   ar(CEREAL_NVP(config.optical_flow_skip_frames));
+  ar(CEREAL_NVP(config.optical_flow_matching_guess_type));
+  ar(CEREAL_NVP(config.optical_flow_matching_default_depth));
 
   ar(CEREAL_NVP(config.vio_linearization_type));
   ar(CEREAL_NVP(config.vio_sqrt_marg));

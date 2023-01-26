@@ -79,6 +79,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     this->calib = calib.cast<Scalar>();
 
     patch_coord = PatchT::pattern2.template cast<float>();
+    depth_guess = config.optical_flow_matching_default_depth;
 
     if (calib.intrinsics.size() > 1) {
       Eigen::Matrix4d Ed;
@@ -97,6 +98,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     OpticalFlowInput::Ptr input_ptr;
 
     while (true) {
+      while (input_depth_queue.try_pop(depth_guess)) continue;
+
       input_queue.pop(input_ptr);
 
       if (!input_ptr.get()) {
@@ -178,12 +181,13 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     frame_counter++;
   }
 
-  void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
-                   const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-                   const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_1,
-                   Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_2) const {
+  void trackPoints(
+      const basalt::ManagedImagePyr<uint16_t>& pyr_1,
+      const basalt::ManagedImagePyr<uint16_t>& pyr_2,
+      const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
+          transform_map_1,
+      Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>& transform_map_2,
+      bool matching = false) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -201,6 +205,13 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                                   std::hash<KeypointId>>
         result;
 
+    double depth = depth_guess;
+    transforms->input_images->depth_guess = depth;  // Store guess for UI
+
+    MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
+    bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
+    const bool use_depth = matching && guess_requires_depth;
+
     auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
       for (size_t r = range.begin(); r != range.end(); ++r) {
         const KeypointId id = ids[r];
@@ -208,22 +219,35 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
         const Eigen::AffineCompact2f& transform_1 = init_vec[r];
         Eigen::AffineCompact2f transform_2 = transform_1;
 
-        bool valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        auto t1 = transform_1.translation();
+        auto t2 = transform_2.translation();
 
-        if (valid) {
-          Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        Eigen::Vector2f off{0, 0};
+        if (use_depth) {
+          off = calib.viewOffset(t1, depth);
+        }
 
-          valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        t2 -= off;  // This modifies transform_2
 
-          if (valid) {
-            Scalar dist2 = (transform_1.translation() -
-                            transform_1_recovered.translation())
-                               .squaredNorm();
+        bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
+                     t2(1) < pyr_2.lvl(0).h;
+        if (!valid) continue;
 
-            if (dist2 < config.optical_flow_max_recovered_dist2) {
-              result[id] = transform_2;
-            }
-          }
+        valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        if (!valid) continue;
+
+        Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        auto t1_recovered = transform_1_recovered.translation();
+
+        t1_recovered += off;
+
+        valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        if (!valid) continue;
+
+        Scalar dist2 = (t1 - t1_recovered).squaredNorm();
+
+        if (dist2 < config.optical_flow_max_recovered_dist2) {
+          result[id] = transform_2;
         }
       }
     };
@@ -332,7 +356,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
 
     if (calib.intrinsics.size() > 1) {
-      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1, true);
 
       for (const auto& kv : new_poses1) {
         transforms->observations.at(1).emplace(kv);
