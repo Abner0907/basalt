@@ -79,6 +79,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     this->calib = calib.cast<Scalar>();
 
     patch_coord = PatchT::pattern2.template cast<float>();
+    depth_guess = config.optical_flow_matching_default_depth;
 
     if (calib.intrinsics.size() > 1) {
       Eigen::Matrix4d Ed;
@@ -97,6 +98,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     OpticalFlowInput::Ptr input_ptr;
 
     while (true) {
+      while (input_depth_queue.try_pop(depth_guess)) continue;
+
       input_queue.pop(input_ptr);
 
       if (!input_ptr.get()) {
@@ -161,7 +164,8 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
       for (size_t i = 0; i < calib.intrinsics.size(); i++) {
         trackPoints(old_pyramid->at(i), pyramid->at(i),
                     transforms->observations[i],
-                    new_transforms->observations[i]);
+                    new_transforms->observations[i], new_img_vec->masks.at(i),
+                    new_img_vec->masks.at(i), i, i);
       }
 
       transforms = new_transforms;
@@ -180,10 +184,9 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
 
   void trackPoints(const basalt::ManagedImagePyr<uint16_t>& pyr_1,
                    const basalt::ManagedImagePyr<uint16_t>& pyr_2,
-                   const Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_1,
-                   Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f>&
-                       transform_map_2) const {
+                   const Keypoints& transform_map_1, Keypoints& transform_map_2,
+                   const Masks& masks1, const Masks& masks2,  //
+                   size_t cam1, size_t cam2) const {
     size_t num_points = transform_map_1.size();
 
     std::vector<KeypointId> ids;
@@ -201,6 +204,14 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
                                   std::hash<KeypointId>>
         result;
 
+    double depth = depth_guess;
+    transforms->input_images->depth_guess = depth;  // Store guess for UI
+
+    bool matching = cam1 != cam2;
+    MatchingGuessType guess_type = config.optical_flow_matching_guess_type;
+    bool guess_requires_depth = guess_type != MatchingGuessType::SAME_PIXEL;
+    const bool use_depth = matching && guess_requires_depth;
+
     auto compute_func = [&](const tbb::blocked_range<size_t>& range) {
       for (size_t r = range.begin(); r != range.end(); ++r) {
         const KeypointId id = ids[r];
@@ -208,22 +219,39 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
         const Eigen::AffineCompact2f& transform_1 = init_vec[r];
         Eigen::AffineCompact2f transform_2 = transform_1;
 
-        bool valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        auto t1 = transform_1.translation();
+        auto t2 = transform_2.translation();
 
-        if (valid) {
-          Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        if (masks1.inBounds(t1.x(), t1.y())) continue;
 
-          valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        Eigen::Vector2f off{0, 0};
+        if (use_depth) {
+          off = calib.viewOffset(t1, depth, cam1, cam2);
+        }
 
-          if (valid) {
-            Scalar dist2 = (transform_1.translation() -
-                            transform_1_recovered.translation())
-                               .squaredNorm();
+        t2 -= off;  // This modifies transform_2
 
-            if (dist2 < config.optical_flow_max_recovered_dist2) {
-              result[id] = transform_2;
-            }
-          }
+        bool valid = t2(0) >= 0 && t2(1) >= 0 && t2(0) < pyr_2.lvl(0).w &&
+                     t2(1) < pyr_2.lvl(0).h;
+        if (!valid) continue;
+
+        valid = trackPoint(pyr_1, pyr_2, transform_1, transform_2);
+        if (!valid) continue;
+
+        if (masks2.inBounds(t2.x(), t2.y())) continue;
+
+        Eigen::AffineCompact2f transform_1_recovered = transform_2;
+        auto t1_recovered = transform_1_recovered.translation();
+
+        t1_recovered += off;
+
+        valid = trackPoint(pyr_2, pyr_1, transform_2, transform_1_recovered);
+        if (!valid) continue;
+
+        Scalar dist2 = (t1 - t1_recovered).squaredNorm();
+
+        if (dist2 < config.optical_flow_max_recovered_dist2) {
+          result[id] = transform_2;
         }
       }
     };
@@ -305,42 +333,94 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     return patch_valid;
   }
 
-  void addPoints() {
-    Eigen::aligned_vector<Eigen::Vector2d> pts0;
-
-    for (const auto& kv : transforms->observations.at(0)) {
-      pts0.emplace_back(kv.second.translation().cast<double>());
+  Keypoints addPointsForCamera(size_t cam_id) {
+    Eigen::aligned_vector<Eigen::Vector2d> pts;  // Current points
+    for (const auto& kv : transforms->observations.at(cam_id)) {
+      pts.emplace_back(kv.second.translation().cast<double>());
     }
 
-    KeypointsData kd;
+    KeypointsData kd;  // Detected new points
+    detectKeypoints(pyramid->at(cam_id).lvl(0), kd,
+                    config.optical_flow_detection_grid_size,
+                    config.optical_flow_detection_num_points_cell,
+                    config.optical_flow_detection_min_threshold,
+                    config.optical_flow_detection_max_threshold,
+                    transforms->input_images->masks.at(cam_id), pts);
 
-    detectKeypoints(pyramid->at(0).lvl(0), kd,
-                    config.optical_flow_detection_grid_size, 1, pts0);
-
-    Eigen::aligned_map<KeypointId, Eigen::AffineCompact2f> new_poses0,
-        new_poses1;
-
-    for (size_t i = 0; i < kd.corners.size(); i++) {
+    Keypoints new_poses;
+    for (auto& corner : kd.corners) {  // Set new points as keypoints
       Eigen::AffineCompact2f transform;
       transform.setIdentity();
-      transform.translation() = kd.corners[i].cast<Scalar>();
+      transform.translation() = corner.cast<Scalar>();
 
-      transforms->observations.at(0)[last_keypoint_id] = transform;
-      new_poses0[last_keypoint_id] = transform;
+      transforms->observations.at(cam_id)[last_keypoint_id] = transform;
+      new_poses[last_keypoint_id] = transform;
 
       last_keypoint_id++;
     }
 
-    if (calib.intrinsics.size() > 1) {
-      trackPoints(pyramid->at(0), pyramid->at(1), new_poses0, new_poses1);
+    return new_poses;
+  }
 
-      for (const auto& kv : new_poses1) {
-        transforms->observations.at(1).emplace(kv);
+  Masks cam0OverlapCellsMasksForCam(size_t cam_id) {
+    int C = config.optical_flow_detection_grid_size;  // cell size
+
+    int w = transforms->input_images->img_data.at(cam_id).img->w;
+    int h = transforms->input_images->img_data.at(cam_id).img->h;
+
+    int x_start = (w % C) / 2;
+    int y_start = (h % C) / 2;
+
+    int x_stop = x_start + C * (w / C - 1);
+    int y_stop = y_start + C * (h / C - 1);
+
+    int x_first = x_start + C / 2;
+    int y_first = y_start + C / 2;
+
+    int x_last = x_stop + C / 2;
+    int y_last = y_stop + C / 2;
+
+    Masks masks;
+    for (int y = y_first; y <= y_last; y += C) {
+      for (int x = x_first; x <= x_last; x += C) {
+        Vector2 ci_uv{x, y};
+        Vector2 c0_uv;
+        Scalar _;
+        bool projected =
+            calib.projectBetweenCams(ci_uv, depth_guess, c0_uv, _, cam_id, 0);
+        bool in_bounds =
+            c0_uv.x() >= 0 && c0_uv.x() < w && c0_uv.y() >= 0 && c0_uv.y() < h;
+        bool valid = projected && in_bounds;
+        if (valid) {
+          Rect cell_mask(x - C / 2, y - C / 2, C, C);
+          masks.masks.push_back(cell_mask);
+        }
       }
+    }
+    return masks;
+  }
+
+  void addPoints() {
+    Masks& ms0 = transforms->input_images->masks.at(0);
+    Keypoints kps0 = addPointsForCamera(0);
+
+    const int NUM_CAMS = calib.intrinsics.size();
+    for (int i = 1; i < NUM_CAMS; i++) {
+      Masks& ms = transforms->input_images->masks.at(i);
+
+      // Match features on areas that overlap with cam0 using optical flow
+      Keypoints kps;
+      trackPoints(pyramid->at(0), pyramid->at(i), kps0, kps, ms0, ms, 0, i);
+      transforms->observations.at(i).insert(kps.begin(), kps.end());
+
+      // Update masks and detect features on area not overlapping with cam0
+      if (!config.optical_flow_detection_nonoverlap) continue;
+      ms += cam0OverlapCellsMasksForCam(i);
+      Keypoints kps_no = addPointsForCamera(i);
     }
   }
 
-  void filterPoints() {
+  void filterPointsForCam(int cam_id) {
     if (calib.intrinsics.size() < 2) return;
 
     std::set<KeypointId> lm_to_remove;
@@ -348,7 +428,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     std::vector<KeypointId> kpid;
     Eigen::aligned_vector<Eigen::Vector2f> proj0, proj1;
 
-    for (const auto& kv : transforms->observations.at(1)) {
+    for (const auto& kv : transforms->observations.at(cam_id)) {
       auto it = transforms->observations.at(0).find(kv.first);
 
       if (it != transforms->observations.at(0).end()) {
@@ -362,7 +442,7 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     std::vector<bool> p3d0_success, p3d1_success;
 
     calib.intrinsics[0].unproject(proj0, p3d0, p3d0_success);
-    calib.intrinsics[1].unproject(proj1, p3d1, p3d1_success);
+    calib.intrinsics[cam_id].unproject(proj1, p3d1, p3d1_success);
 
     for (size_t i = 0; i < p3d0_success.size(); i++) {
       if (p3d0_success[i] && p3d1_success[i]) {
@@ -378,7 +458,14 @@ class FrameToFrameOpticalFlow : public OpticalFlowBase {
     }
 
     for (int id : lm_to_remove) {
-      transforms->observations.at(1).erase(id);
+      transforms->observations.at(cam_id).erase(id);
+    }
+  }
+
+  void filterPoints() {
+    const int NUM_CAMS = calib.intrinsics.size();
+    for (int i = 1; i < NUM_CAMS; i++) {
+      filterPointsForCam(i);
     }
   }
 
